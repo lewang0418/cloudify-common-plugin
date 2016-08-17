@@ -61,11 +61,6 @@ from cloudify_rest_client.node_instances import NodeInstance
 
 
 DEFAULT_LOCAL_TASK_THREAD_POOL_SIZE = 1
-NODES = 'nodes'
-RELATIONSHIPS = 'relationships'
-PROPERTIES = 'properties'
-CONNECTION_TYPE = 'connection_type'
-TARGET_ID = 'target_id'
 ALL_TO_ALL = 'all_to_all'
 ALL_TO_ONE = 'all_to_one'
 ONE_TO_ALL = 'one_to_all'
@@ -211,6 +206,11 @@ class CloudifyWorkflowRelationship(object):
     def target_node(self):
         """The relationship target node WorkflowContextNode instance"""
         return self._nodes_and_instances.get_node(self.target_id)
+
+    @property
+    def connection_type(self):
+        """The relationship connection type"""
+        return self._relationship.get('properties')['connection_type']
 
     @property
     def source_operations(self):
@@ -1117,46 +1117,40 @@ class CloudifyWorkflowContextHandler(object):
         raise NotImplementedError('Implemented by subclasses')
 
 
+#  def _get_related_nodes(self, nodes, modified_node, instances):
+#    modified_nodes = {}
+#    modified_nodes[modified_node] = {'instances': instances}
+#    for node in nodes:
+#        if node['name'] == modified_node:
+#            for relationship in node[RELATIONSHIPS]:
+#                if relationship[PROPERTIES][CONNECTION_TYPE] == ONE_TO_ONE:
+#                    modified_nodes[relationship[TARGET_ID]] = {'instances': instances}
+#    return modified_nodes
 
-    def _get_related_nodes(self, nodes, modified_node, instances):
-        modified_nodes = {}
-        modified_nodes[modified_node] = {'instances': instances}
-        for node in nodes:
-            if node['name'] == modified_node:
-                for relationship in node[RELATIONSHIPS]:
-                    if relationship[PROPERTIES][CONNECTION_TYPE] == ONE_TO_ONE:
-                        modified_nodes[relationship[TARGET_ID]] = {'instances': instances}
-        return modified_nodes
-
-
-    def start_deployment_modification(self, modified_node):
-        # CHANGED: given a modified_node to find related nodes
-        if len(modified_node) != 1:
-            raise ValueError("size of modified_node is '{0}' but not 1. ".format(len(modified_node)))
-
+    # ADDED: to support modification in local mode
+    def start_deployment_modification(self, modified_nodes):
         deployment_id = self.workflow_ctx.deployment.id
         storage = self.workflow_ctx.internal.handler.storage
         raw_nodes = storage.get_nodes()
         raw_node_instances = storage.get_node_instances()
 
-        node, instances = modified_node.popitem()
-        if instances.get('instnaces', None):
-            raise ValueError("size of instnaces is not defined")
-        modified_nodes = self._get_related_nodes(raw_nodes, node, instances['instances'])
+        print "*--------------------*"
+        print modified_nodes
+        print "*--------------------*"
 
         node_instances_modification = tasks.modify_deployment(
             nodes=raw_nodes,
             previous_node_instances=raw_node_instances,
             modified_nodes=modified_nodes)
 
-        print "--------------------"
+
         print json.dumps(node_instances_modification)
 
-        added_and_related = node_instances_modification['added_and_related']
-        for node_instance in added_and_related:
-            if node_instance.get('modification') == 'added':
-                storage.add_node_instance(node_instance)
-                storage.add_node_to_data(node_instance)
+#        added_and_related = node_instances_modification['added_and_related']
+#        for node_instance in added_and_related:
+#            if node_instance.get('modification') == 'added':
+#                storage.add_node_instance(node_instance)
+#                storage.add_node_to_data(node_instance)
 
 #        removed_and_related = node_instances_modification['removed_and_related']
 #        for node_instance in removed_and_related:
@@ -1164,7 +1158,7 @@ class CloudifyWorkflowContextHandler(object):
 #                storage.delete_node_instance(node_instance)
 #                storage.delete_node_from_data(node_instance)
 
-#        raise NotImplementedError('Implemented by subclasses')
+        raise NotImplementedError('Implemented by subclasses')
 
         node_instances_modification['before_modification'] = raw_node_instances
         node_instances = DotMap(node_instances_modification)
@@ -1184,6 +1178,7 @@ class CloudifyWorkflowContextHandler(object):
         return Modification(self.workflow_ctx, modification)
 
 
+    # ADDED: to support modification in local mode
     def finish_deployment_modification(self, modification):
         if modification.status in DeploymentModification.END_STATES:
             raise 'Cannot finish deployment modification: {0}. It is already in {1} status.'. \
@@ -1191,6 +1186,7 @@ class CloudifyWorkflowContextHandler(object):
 
         modified_nodes = modification.modified_nodes
         node_instances = modification.node_instances
+        storage = self.workflow_ctx.internal.handler.storage
         for node_instance in node_instances['removed_and_related']:
             if node_instance.get('modification') == 'removed':
                 storage.delete_node_instance(node_instance)
@@ -1206,6 +1202,8 @@ class CloudifyWorkflowContextHandler(object):
             node_instances=None,
             context=None)
 
+
+    # ADDED: to support modification in local mode
     def rollback_deployment_modification(self, modification):
         if modification.status in DeploymentModification.END_STATES:
             raise 'Cannot rollback deployment modification: {0}. It is already in {1} status.'. \
@@ -1504,9 +1502,14 @@ class LocalCloudifyWorkflowContextHandler(CloudifyWorkflowContextHandler):
         return self.storage.download_resource(resource_path=resource_path,
                                               target_path=target_path)
 
+
     @property
     def scaling_groups(self):
-        return self.storage.plan.get('scaling_groups', {})
+        print "try to get scaling_gourps"
+        scaling_groups = self.storage.plan.get('groups', {})
+        #scaling_groups = self.storage.plan.get('scaling_groups', {})
+        print 'scaling_groups:', scaling_groups
+        return scaling_groups
 
 class Modification(object):
 

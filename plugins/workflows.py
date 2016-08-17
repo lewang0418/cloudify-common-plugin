@@ -17,6 +17,10 @@ from cloudify import constants, utils
 from cloudify.decorators import workflow
 from cloudify.plugins import lifecycle
 
+ALL_TO_ALL = 'all_to_all'
+ALL_TO_ONE = 'all_to_one'
+ONE_TO_ALL = 'one_to_all'
+ONE_TO_ONE = 'one_to_one'
 
 @workflow
 def install(ctx, **kwargs):
@@ -101,39 +105,15 @@ def scale(ctx, node_id, delta, scale_compute, **kwargs):
         return
     host_node = node.host_node
     scaled_node = host_node if (scale_compute and host_node) else node
-    curr_num_instances = scaled_node.number_of_instances
-    planned_num_instances = curr_num_instances + delta
-    if planned_num_instances < 0:
-        raise ValueError('Provided delta: {0} is illegal. current number of'
-                         'instances of node {1} is {2}'
-                         .format(delta, node_id, curr_num_instances))
 
-    modification = ctx.deployment.start_modification({
-        scaled_node.id: {
-            'instances': planned_num_instances
+    modified_nodes = {}
+    _get_related_modified_nodes(ctx, scaled_node, delta, modified_nodes)
+    modification = ctx.deployment.start_modification(modified_nodes)
 
-            # These following parameters are not exposed at the moment,
-            # but should be used to control which node instances get scaled in
-            # (when scaling in).
-            # They are mentioned here, because currently, the modification API
-            # is not very documented.
-            # Special care should be taken because if `scale_compute == True`
-            # (which is the default), then these ids should be the compute node
-            # instance ids which are not necessarily instances of the node
-            # specified by `node_id`.
-
-            # Node instances denoted by these instance ids should be *kept* if
-            # possible.
-            # 'removed_ids_exclude_hint': [],
-
-            # Node instances denoted by these instance ids should be *removed*
-            # if possible.
-            # 'removed_ids_include_hint': []
-        }
-    })
     try:
         ctx.logger.info('Deployment modification started. '
                         '[modification_id={0}]'.format(modification.id))
+
         if delta > 0:
             added_and_related = set(modification.added.node_instances)
             added = set(i for i in added_and_related
@@ -183,6 +163,44 @@ def scale(ctx, node_id, delta, scale_compute, **kwargs):
                             ' state.'
                             '[modification_id={0}]'.format(modification.id))
             raise
+
+
+def _get_related_modified_nodes(ctx, node, delta, modified_nodes):
+    # These following parameters are not exposed at the moment,
+    # but should be used to control which node instances get scaled in
+    # (when scaling in).
+    # They are mentioned here, because currently, the modification API
+    # is not very documented.
+    # Special care should be taken because if `scale_compute == True`
+    # (which is the default), then these ids should be the compute node
+    # instance ids which are not necessarily instances of the node
+    # specified by `node_id`.
+
+    # Node instances denoted by these instance ids should be *kept* if
+    # possible.
+    # 'removed_ids_exclude_hint': [],
+
+    # Node instances denoted by these instance ids should be *removed*
+    # if possible.
+    # 'removed_ids_include_hint': []
+
+    curr_num_instances = node.number_of_instances
+    planned_num_instances = curr_num_instances + delta
+    if planned_num_instances < 0:
+        raise ValueError('Provided delta: {0} is illegal. current number of'
+                         'instances of node {1} is {2}'
+                         .format(delta, node_id, curr_num_instances))
+
+    modified_nodes[node.id] = {'instances': planned_num_instances}
+
+    if not node.relationships:
+        return
+
+    for relationship in node.relationships:
+        if relationship.connection_type == ONE_TO_ONE:
+            node = ctx.get_node(relationship.target_id)
+            _get_related_modified_nodes(ctx, node, delta, modified_nodes)
+
 
 
 def _filter_node_instances(ctx, node_ids, node_instance_ids, type_names):
