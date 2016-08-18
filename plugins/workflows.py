@@ -103,11 +103,11 @@ def scale(ctx, node_id, delta, scale_compute, **kwargs):
     if delta == 0:
         ctx.logger.info('delta parameter is 0, so no scaling will take place.')
         return
-    host_node = node.host_node
-    scaled_node = host_node if (scale_compute and host_node) else node
+#    host_node = node.host_node
+#    scaled_node = host_node if (scale_compute and host_node) else node
 
     modified_nodes = {}
-    _get_related_modified_nodes(ctx, scaled_node, delta, modified_nodes)
+    _get_related_modified_nodes(ctx, node, delta, modified_nodes)
     modification = ctx.deployment.start_modification(modified_nodes)
 
     try:
