@@ -19,6 +19,19 @@ class Event(object):
     def __init__(self, event):
         self._event = event
 
+	if os.environ.get('CLOUDAMQP_URL', ''):
+	    # Create message queue
+            import pika, os
+
+            url = os.environ.get('CLOUDAMQP_URL', 'amqp://admin:nso@94.246.116.200/%2f')
+            params = pika.URLParameters(url)
+            params.socket_timeout = 5
+            connection = pika.BlockingConnection(params) # Connect to CloudAMQP
+            self.channel = connection.channel() # start a channel
+            self.channel.queue_declare(queue=os.environ.get('NETWORK_SLICE_ORCHESTRATOR_ID', 'nso-1')) # Declare a queue
+            #connection.close()
+
+
     def __str__(self):
         deployment_id = self.deployment_id
         timestamp = self.timestamp

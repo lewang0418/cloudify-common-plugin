@@ -1145,11 +1145,11 @@ class CloudifyWorkflowContextHandler(object):
 
         print json.dumps(node_instances_modification)
 
-        added_and_related = node_instances_modification['added_and_related']
-        for node_instance in added_and_related:
-            if node_instance.get('modification') == 'added':
-                storage.add_node_instance(node_instance)
-                storage.add_node_to_data(node_instance)
+#        added_and_related = node_instances_modification['added_and_related']
+#        for node_instance in added_and_related:
+#            if node_instance.get('modification') == 'added':
+#                storage.add_node_instance(node_instance)
+#                storage.add_node_to_data(node_instance)
 
 #        removed_and_related = node_instances_modification['removed_and_related']
 #        for node_instance in removed_and_related:
@@ -1157,7 +1157,7 @@ class CloudifyWorkflowContextHandler(object):
 #                storage.delete_node_instance(node_instance)
 #                storage.delete_node_from_data(node_instance)
 
-#        raise NotImplementedError('Implemented by subclasses')
+        raise NotImplementedError('Implemented by subclasses')
 
         node_instances_modification['before_modification'] = raw_node_instances
         node_instances = DotMap(node_instances_modification)
